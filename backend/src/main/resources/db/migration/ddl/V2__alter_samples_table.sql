@@ -1,0 +1,1 @@
+ALTER TABLE samples ALTER COLUMN id TYPE bigint; 

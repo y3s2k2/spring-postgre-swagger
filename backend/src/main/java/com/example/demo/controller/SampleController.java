@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -19,7 +20,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.demo.model.Sample;
+import com.example.demo.model.SampleDTO;
 import com.example.demo.repository.SampleRepository;
+import com.example.demo.service.SampleService;
 
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,7 @@ import lombok.RequiredArgsConstructor;
 public class SampleController {
 
   private final SampleRepository repository;
+  private final SampleService service;
 
   @Operation(summary = "タスクをページネーションで取得します")
   @GetMapping("/")
@@ -42,13 +46,19 @@ public class SampleController {
 
   @Operation(summary = "タスクを登録します")
   @PostMapping("/")
-  ResponseEntity<?> save(@RequestBody Sample sample) {
+  ResponseEntity<?> save(@RequestBody SampleDTO sampleDTO) {
     try {
-      Sample savedSample = repository.save(sample);
+      // created_atとupdated_atが設定されていない可能性があります
+      Sample savedSample = service.createSample(sampleDTO);
       return ResponseEntity.ok(savedSample);
     } catch (DataIntegrityViolationException e) {
       String errorMessage = "データの一意性制約に違反しました: " + e.getMessage();
       return ResponseEntity.status(HttpStatus.CONFLICT).body(errorMessage);
+    } catch (org.springframework.transaction.TransactionSystemException e) {
+      StringBuilder errorMessage = new StringBuilder("トランザクションエラーが発生しました: " + e.getMessage());
+      Optional.ofNullable(e.getRootCause())
+          .ifPresent(cause -> errorMessage.append(" 根本原因: ").append(cause.getMessage()));
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorMessage.toString());
     } catch (Exception e) {
       String errorMessage = "サンプルの保存中にエラーが発生しました: " + e.getMessage();
       return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorMessage);
@@ -57,21 +67,14 @@ public class SampleController {
 
   @Operation(summary = "タスクを1件取得します")
   @GetMapping("/{id}")
-  Sample findById(@PathVariable Long id) {
-    return repository.findById(id).get();
+  SampleDTO findById(@PathVariable Long id) {
+    return service.getSampleById(id);
   }
 
   @Operation(summary = "タスクを更新します")
   @PutMapping("/{id}")
-  Sample save(@RequestBody Sample newSample, @PathVariable Long id) {
-    return repository.findById(id).map(sample -> {
-      sample.setUsername(newSample.getUsername());
-      sample.setEmail(newSample.getEmail());
-      return repository.save(sample);
-    }).orElseGet(() -> {
-      newSample.setId(id);
-      return repository.save(newSample);
-    });
+  Sample save(@RequestBody SampleDTO newSample, @PathVariable Long id) {
+    return service.updateSample(newSample, id);
   }
 
   @Operation(summary = "タスクを削除します")
